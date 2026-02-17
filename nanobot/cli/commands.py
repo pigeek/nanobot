@@ -438,60 +438,61 @@ def gateway(
 # ============================================================================
 
 
+async def _send_to_gateway(message: str, session_id: str, port: int = 18790) -> str:
+    """Send message to gateway API and return response."""
+    import aiohttp
+    url = f"http://127.0.0.1:{port}/api/chat"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json={
+                "message": message,
+                "session_id": session_id,
+            }) as resp:
+                if resp.status != 200:
+                    raise Exception(f"Gateway returned {resp.status}: {await resp.text()}")
+                data = await resp.json()
+                return data.get("response", "")
+    except aiohttp.ClientConnectorError:
+        raise Exception(f"Cannot connect to gateway on port {port}. Start it with: nanobot gateway")
+
+
 @app.command()
 def agent(
     message: str = typer.Option(None, "--message", "-m", help="Message to send to the agent"),
     session_id: str = typer.Option("cli:direct", "--session", "-s", help="Session ID"),
     markdown: bool = typer.Option(True, "--markdown/--no-markdown", help="Render assistant output as Markdown"),
     logs: bool = typer.Option(False, "--logs/--no-logs", help="Show nanobot runtime logs during chat"),
+    gateway_port: int = typer.Option(18790, "--gateway-port", help="Gateway port to connect to"),
 ):
-    """Interact with the agent directly."""
-    from nanobot.config.loader import load_config
-    from nanobot.bus.queue import MessageBus
-    from nanobot.agent.loop import AgentLoop
+    """Interact with the agent via the gateway API.
+
+    The gateway must be running (nanobot gateway). This command sends messages
+    to the gateway which handles all agent operations and MCP tools.
+    """
     from loguru import logger
-    
-    config = load_config()
-    
-    bus = MessageBus()
-    provider = _make_provider(config)
 
     if logs:
         logger.enable("nanobot")
     else:
         logger.disable("nanobot")
-    
-    agent_loop = AgentLoop(
-        bus=bus,
-        provider=provider,
-        workspace=config.workspace_path,
-        model=config.agents.defaults.model,
-        temperature=config.agents.defaults.temperature,
-        max_tokens=config.agents.defaults.max_tokens,
-        max_iterations=config.agents.defaults.max_tool_iterations,
-        memory_window=config.agents.defaults.memory_window,
-        brave_api_key=config.tools.web.search.api_key or None,
-        exec_config=config.tools.exec,
-        restrict_to_workspace=config.tools.restrict_to_workspace,
-        mcp_servers=config.tools.mcp_servers,
-    )
-    
-    # Show spinner when logs are off (no output to miss); skip when logs are on
+
     def _thinking_ctx():
         if logs:
             from contextlib import nullcontext
             return nullcontext()
-        # Animated spinner is safe to use with prompt_toolkit input handling
         return console.status("[dim]nanobot is thinking...[/dim]", spinner="dots")
 
     if message:
         # Single message mode
         async def run_once():
-            with _thinking_ctx():
-                response = await agent_loop.process_direct(message, session_id)
-            _print_agent_response(response, render_markdown=markdown)
-            await agent_loop.close_mcp()
-        
+            try:
+                with _thinking_ctx():
+                    response = await _send_to_gateway(message, session_id, gateway_port)
+                _print_agent_response(response, render_markdown=markdown)
+            except Exception as e:
+                console.print(f"[red]Error: {e}[/red]")
+                raise typer.Exit(1)
+
         asyncio.run(run_once())
     else:
         # Interactive mode
@@ -504,7 +505,7 @@ def agent(
             os._exit(0)
 
         signal.signal(signal.SIGINT, _exit_on_sigint)
-        
+
         async def run_interactive():
             try:
                 while True:
@@ -519,9 +520,9 @@ def agent(
                             _restore_terminal()
                             console.print("\nGoodbye!")
                             break
-                        
+
                         with _thinking_ctx():
-                            response = await agent_loop.process_direct(user_input, session_id)
+                            response = await _send_to_gateway(user_input, session_id, gateway_port)
                         _print_agent_response(response, render_markdown=markdown)
                     except KeyboardInterrupt:
                         _restore_terminal()
@@ -531,9 +532,12 @@ def agent(
                         _restore_terminal()
                         console.print("\nGoodbye!")
                         break
-            finally:
-                await agent_loop.close_mcp()
-        
+                    except Exception as e:
+                        console.print(f"[red]Error: {e}[/red]")
+                        break
+            except Exception as e:
+                console.print(f"[red]Gateway error: {e}[/red]")
+
         asyncio.run(run_interactive())
 
 
