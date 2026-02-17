@@ -136,20 +136,7 @@ class ChannelManager:
                 logger.info("QQ channel enabled")
             except ImportError as e:
                 logger.warning(f"QQ channel not available: {e}")
-
-        # Voice PE channel (Home Assistant Voice PE devices)
-        if self.config.channels.voice_pe.enabled:
-            try:
-                # Import from nabu-voice-server package (mounted via PYTHONPATH)
-                from nabu_voice_server.channel import VoicePEChannel
-                self.channels["voice_pe"] = VoicePEChannel(
-                    self.config.channels.voice_pe,
-                    self.bus,
-                )
-                logger.info("Voice PE channel enabled")
-            except ImportError as e:
-                logger.warning(f"Voice PE channel not available: {e}")
-
+    
     async def _start_channel(self, name: str, channel: BaseChannel) -> None:
         """Start a channel and log any exceptions."""
         try:
