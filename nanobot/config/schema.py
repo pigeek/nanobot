@@ -142,6 +142,41 @@ class QQConfig(BaseModel):
     allow_from: list[str] = Field(default_factory=list)  # Allowed user openids (empty = public access)
 
 
+class VoicePESTTConfig(BaseModel):
+    """Voice PE STT configuration."""
+    provider: str = "local"  # "local" or "openai"
+    model: str = "whisper-1"
+    local_whisper_uri: str = "ws://localhost:10301"
+    language: str = "en"
+    streaming: bool = True
+
+
+class VoicePETTSConfig(BaseModel):
+    """Voice PE TTS configuration."""
+    provider: str = "openedai"
+    openedai_url: str = "http://localhost:8000"
+    model: str = "speaches-ai/piper-en_US-joe-medium"
+    voice: str = "joe"
+    delivery_mode: str = "url"  # "stream" or "url"
+    output_sample_rate: int = 48000
+    speed: float = 1.0
+
+
+class VoicePEConfig(BaseModel):
+    """Voice PE channel configuration for Home Assistant Voice PE devices.
+
+    Enables voice interaction with nanobot via ESPHome voice assistant devices.
+    Uses local STT (Whisper) and TTS for privacy and low latency.
+    """
+    enabled: bool = False
+    web_host: str = "0.0.0.0"
+    web_port: int = 8080
+    external_host: str = ""  # For TTS URL generation (auto-detected if empty)
+    stt: VoicePESTTConfig = Field(default_factory=VoicePESTTConfig)
+    tts: VoicePETTSConfig = Field(default_factory=VoicePETTSConfig)
+    allow_from: list[str] = Field(default_factory=list)  # Allowed device IDs (empty = allow all)
+
+
 class ChannelsConfig(BaseModel):
     """Configuration for chat channels."""
     whatsapp: WhatsAppConfig = Field(default_factory=WhatsAppConfig)
@@ -153,6 +188,7 @@ class ChannelsConfig(BaseModel):
     email: EmailConfig = Field(default_factory=EmailConfig)
     slack: SlackConfig = Field(default_factory=SlackConfig)
     qq: QQConfig = Field(default_factory=QQConfig)
+    voice_pe: VoicePEConfig = Field(default_factory=VoicePEConfig)
 
 
 class AgentDefaults(BaseModel):
