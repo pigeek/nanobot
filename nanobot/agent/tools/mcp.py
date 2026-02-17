@@ -58,9 +58,9 @@ async def connect_mcp_servers(
                 )
                 read, write = await stack.enter_async_context(stdio_client(params))
             elif cfg.url:
-                from mcp.client.sse import sse_client
-                read, write = await stack.enter_async_context(
-                    sse_client(cfg.url)
+                from mcp.client.streamable_http import streamable_http_client
+                read, write, _ = await stack.enter_async_context(
+                    streamable_http_client(cfg.url)
                 )
             else:
                 logger.warning(f"MCP server '{name}': no command or url configured, skipping")
