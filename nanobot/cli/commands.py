@@ -313,10 +313,10 @@ def _make_provider(config: Config):
 
 @app.command()
 def gateway(
-    port: int = typer.Option(18790, "--port", "-p", help="Gateway port"),
+    port: int = typer.Option(18790, "--port", "-p", help="Gateway/API port"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
 ):
-    """Start the nanobot gateway."""
+    """Start the nanobot gateway with HTTP API."""
     from nanobot.config.loader import load_config, get_data_dir
     from nanobot.bus.queue import MessageBus
     from nanobot.agent.loop import AgentLoop
@@ -325,6 +325,7 @@ def gateway(
     from nanobot.cron.service import CronService
     from nanobot.cron.types import CronJob
     from nanobot.heartbeat.service import HeartbeatService
+    from nanobot.api.server import NanobotAPIServer
     
     if verbose:
         import logging
@@ -403,9 +404,14 @@ def gateway(
         console.print(f"[green]✓[/green] Cron: {cron_status['jobs']} scheduled jobs")
     
     console.print(f"[green]✓[/green] Heartbeat: every 30m")
-    
+
+    # Create HTTP API server
+    api_server = NanobotAPIServer(agent, host="0.0.0.0", port=port)
+    console.print(f"[green]✓[/green] HTTP API: http://0.0.0.0:{port}/api/chat")
+
     async def run():
         try:
+            await api_server.start()
             await cron.start()
             await heartbeat.start()
             await asyncio.gather(
@@ -415,12 +421,13 @@ def gateway(
         except KeyboardInterrupt:
             console.print("\nShutting down...")
         finally:
+            await api_server.stop()
             await agent.close_mcp()
             heartbeat.stop()
             cron.stop()
             agent.stop()
             await channels.stop_all()
-    
+
     asyncio.run(run())
 
 
